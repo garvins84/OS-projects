@@ -1,0 +1,57 @@
+Using a Geiger Counter to Generate Random Numbers, Accessible Using a FUSE Filesystem
+Using “fuse-python”
+
+Michael Barney, Luke Behnke, Nick Bonnell, Scott Garvin, Robert Kinney
+CSCI-C435 Operating Systems Implementation and Design
+Computer Science - Indiana University South Bend
+South Bend, Indiana
+
+
+1.	Introduction
+This is a fuse file system coded from python to read in timestamps from a file that has been collecting time stamps from the output of a geiger counter. There are two files that a user can read from that return results from this collection.  The first, “count”, simply returns the current number of counts that the geiger counter is collecting per minute.  The second, “random”, compares the timestamps to create a random bits that are packed into bytes for the user to read.
+
+2.	Implementation
+We chose to write our file system in Python. We used several online resources to get ideas for how to approach the problem. Python seemed like a good choice to use as our code base because it has a built in library that handles operating system functions. This allowed for the implementation of the project to be a relatively smooth process and reduced the amount of work that was needed on our end.
+
+To generate the random bits, we first took the difference of two time stamps to generate a time interval. We then did a comparison on two time intervals, if the first interval was smaller than the second interval, we generated a 0, otherwise we generated a 1. This was then concatenated with a variable called “byte” which stored up to eight bits. Once “byte” contains 8 bits, it was typecasted and stored as true bits into a string variable. We chose this method because it was simpler than using a complex library to compact the bits. It is straightforward and fast.
+
+For the counts per minute we considered two options: getting the average counts per minute over the life of the collection, or getting the counts in the last minute.  In the end we decided to get the number of timestamps generated in the last minute.  We chose this implementation because we felt that it would more accurately represent the current speed of collection which could vary widely over the life of the collection process.  In order to do this we did a seek to the end of the file, then timestamps back to the point that they were one minute old.  We counted the timestamps as we read them, then output the sum as the return from the read function.
+
+2.1 Function Implementations
+getattr()
+	The getattr() function defines the attributes of a directory or file and returns a stat object. If we encounter a backslash, we set st_mode to show that it is a directory and assign the number of links to two. One link for the directory itself, and another for (.) inside of it. If we encounter count as a file name, we set st.st_mode’s value to a file, the number of links of one, and the size to 4 in order to hold one integer. If we encounter random as a file name, we do the same as count but have a larger size to accommodate more values. In the case that we encounter a value not covered by the previous conditions, an error is returned, otherwise we return the stat object.
+
+readdir()
+	The readdir() function takes in three parameters. This is the function returns the directory entries to the caller. The directory entries for this fuse system are ‘.’, ‘..’, ‘random’, and ‘count’.
+
+open()
+	The open() function consists of three major logical operations. First the function prints to the console to demonstrate that it is being called. Secondly, it checks to see if another file is being opened other than “count” or “random.” If so, it returns an error because we do not want to deal with any other files. Lastly, the function makes sure that the file is opened in read-only mode so that no intentional, or accidental, editing can take place.
+
+read()
+	Read is where the majority of the coding was done.  It consists of 2 main operations, reading from the file that returns random bytes and reading from the file that returns timestamps per minute.
+
+For reading from the random bytes file read opens the timestamps file and checks how many timestamps are in it.  If there are fewer than the required 4 timestamps in the file then an error is returned.  If there are at least 4 timestamps in the file then read seeks to a random timestamp in the file (using a pseudo-random generator seeded by the current time) that is at least 4 timestamps from the end of the file.  It then reads the random timestamp and the next 3 timestamps in the file.  The first 2 timestamps are compared to get the time interval between them.  The second 2 timestamps are compared in the same way to get their interval.  Once both intervals are obtained they are compared.  If the first interval is smaller than the second then a 0 is added to a string that was declared to hold 8 0s or 1’s.  Otherwise a 1 is added.  This process of obtaining and comparing intervals is repeated 8 times to get 8 0s or 1s into our string.  The 8 0s and / or 1s are then packed into a byte.  The process of obtaining bits and packing them into bytes is repeated until the size of the file is reached at which point the bytes are returned to the calling function.
+	
+For reading from the counts per minute file read scans timestamps, starting from the end of the timestamps file and working backwards.  It continues as long as  timestamps are found that are less than a minute ago.  Each time a timestamp that is less than a minute ago a variable that keeps track of the count is incremented and once the scan is complete the number of timestamps counted is returned to the calling function.
+
+3.	Testing
+3.1 Timestamp Collection
+In order to test the time stamp collection program we simply output the contents of the file to ensure that we were getting timestamps in the correct format and that they were incrementing in a meaningful way.
+
+3.2 Random
+In order to test “random” put together a small program in C++ to test the output of our program since it wasn’t in human readable form.  In order to test we hard coded variables in and saw that we got the output that we were expecting.  We changed the return value from the random bytes to a hard coded string of all zeros and ensured that “random” output a 0.  We then put other strings of zeros and ones and tested the output from “random”.  We opened “random” in a variety of editors to make sure that there were no conflicts with how it’s opened. 
+
+3.3 Count
+In order to test “count” we would output the timestamps in the timestamp file and counted the stamps that were in the file with times in the last 60 seconds, then we output the contents of the “count” file and compared our results.  We did this a number of times to ensure accuracy. 
+
+4.	What was challenging
+The most challenging part of this project was wrapping our heads around what a FUSE filesystem is.  The abstract idea of simulating a file that isn’t really a file, but essentially behaves like a file was a significant hurdle.  It was only through spending time doing the project and trying to find documentation on FUSE file systems that we started to understand the idea.  The other difficult part was finding documentation on FUSE file systems.  All that we were able to find was source files for the FUSE systems with little commenting or documentation.  In the end the only really useful things that we found were examples of other people writing FUSE file systems.  We also had some trouble understanding what our program should output, whether it be ASCII ones and zeros or actual machine bytes.  
+
+5.	What was easy
+The easiest part of the project was gathering the timestamps from the raspberry pis and the geiger counter hooked up to them. This is primarily due to the code for gathering this data already being supplied to us. In the end, we ended up modifying the code that was given to us in order to suit our needs.
+
+6.	How to Run Our Fuse System
+To run our fuse system you need to navigate to the folder with the fuse python code. Run the line [python our_fuse.py /mount_location]. To get random variables type in a read function to read random, like [cat random]. This will output random integers.  To get counts per minute run [cat count].
+
+7.	Assumptions
+We assume that the user will handle converting the output from “random” from machine bytes to whatever format they want to output.
